@@ -65,12 +65,12 @@ parser.add_argument("--epoch_time_show", type=bool, default=True, help="interval
 parser.add_argument("--epoch_save_model_freq", type=int, default=100, help="number of epops per model save")
 parser.add_argument("--minibatch_averaging", type=bool, default=False, help="Minibatch averaging")
 
-parser.add_argument("--pretrained_status", type=bool, default=False, help="If want to use ae pretrained weights")
-parser.add_argument("--training", type=bool, default=True, help="Training status")
+parser.add_argument("--pretrained_status", type=bool, default=True, help="If want to use ae pretrained weights")
+parser.add_argument("--training", type=bool, default=False, help="Training status")
 parser.add_argument("--resume", type=bool, default=False, help="Training status")
 parser.add_argument("--finetuning", type=bool, default=False, help="Training status")
 parser.add_argument("--generate", type=bool, default=False, help="Generating Sythetic Data")
-parser.add_argument("--evaluate", type=bool, default=False, help="Evaluation status")
+parser.add_argument("--evaluate", type=bool, default=True, help="Evaluation status")
 parser.add_argument("--expPATH", type=str, default=os.path.expanduser('~/experiments/pytorch/model/'+experimentName),
                     help="Training status")
 opt = parser.parse_args()
@@ -395,7 +395,7 @@ autoencoderDecoder = autoencoderModel.decoder
 
 # Define cuda Tensors
 Tensor = torch.FloatTensor
-one = torch.FloatTensor([1])
+one = torch.FloatTensor(1)
 mone = one * -1
 
 # Adversarial ground truths
@@ -577,7 +577,8 @@ if opt.training:
                 # Turn to variable
                 inputv = Variable(input)
 
-                errD_real = torch.mean(discriminatorModel(inputv).view(-1))
+                errD_real = torch.mean(discriminatorModel(inputv), dim=0)
+                errD_real.backward(one)
 
                 # Measure discriminator's ability to classify real from generated samples
                 # The detach() method constructs a new view on a tensor which is declared
@@ -592,10 +593,12 @@ if opt.training:
                     fake = generatorModel(noisev)
 
                 fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
-                errD_fake = torch.mean(discriminatorModel(fake_decoded.detach()).view(-1))
+                errD_fake = torch.mean(discriminatorModel(fake_decoded.detach()),dim=0)
+                errD_fake.backward(mone)
 
                 # Backward
-                errD = errD_fake - errD_real
+                errD = errD_real - errD_fake
+                # errD.backward()
 
                 # Optimizer step
                 optimizer_D.step()
@@ -635,8 +638,8 @@ if opt.training:
             fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
 
             # Loss measures generator's ability to fool the discriminator
-            errG = -torch.mean(discriminatorModel(fake_decoded).view(-1))
-            errG.backward()
+            errG = torch.mean(discriminatorModel(fake_decoded),dim=0)
+            errG.backward(one)
 
             # read more at https://discuss.pytorch.org/t/why-do-we-need-to-set-the-gradients-manually-to-zero-in-pytorch/4903/4
             optimizer_G.step()
@@ -748,7 +751,7 @@ if opt.generate:
     #####################################
 
     # Loading the checkpoint
-    checkpoint = torch.load(os.path.join(opt.expPATH, "model_epoch_300.pth"))
+    checkpoint = torch.load(os.path.join(opt.expPATH, "model_epoch_100.pth"))
 
     # Load models
     generatorModel.load_state_dict(checkpoint['Generator_state_dict'])
@@ -776,7 +779,7 @@ if opt.generate:
         # z = Variable(Tensor(np.random.normal(0, 1, (opt.batch_size, opt.latent_dim))))
         z = torch.randn(opt.batch_size, opt.latent_dim, device=device)
         gen_samples_tensor = generatorModel(z)
-        gen_samples_decoded = torch.squeeze(autoencoderDecoder(gen_samples_tensor.unsqueeze(dim=2)))
+        gen_samples_decoded = torch.squeeze(autoencoderDecoder(gen_samples_tensor.view(-1, gen_samples_tensor.shape[1], 1)))
         gen_samples[i * opt.batch_size:(i + 1) * opt.batch_size, :] = gen_samples_decoded.cpu().data.numpy()
         # Check to see if there is any nan
         assert (gen_samples[i, :] != gen_samples[i, :]).any() == False
