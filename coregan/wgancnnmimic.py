@@ -77,7 +77,7 @@ print(opt)
 
 # Create experiments DIR
 if not os.path.exists(opt.expPATH):
-    os.system('mkdir -p {0}'.format(opt.expPATH))
+    os.system('mkdir {0}'.format(opt.expPATH))
 
 # Random seed for pytorch
 opt.manualSeed = random.randint(1, 10000) # fix seed
@@ -280,7 +280,7 @@ class Discriminator(nn.Module):
             ma_coef = ma_coef * 2
 
         self.model = nn.Sequential(
-            nn.Linear(dataset_train_object.featureSize, self.disDim),
+            nn.Linear(ma_coef * dataset_train_object.featureSize, self.disDim),
             nn.ReLU(True),
             nn.Linear(self.disDim, int(self.disDim)),
             nn.ReLU(True),
@@ -470,47 +470,30 @@ if opt.training:
         autoencoderModel.eval()
         autoencoderDecoder.eval()
 
-    if not pretrained_status:
-        for epoch_pre in range(opt.n_epochs_pretrain):
-            for i, samples in enumerate(dataloader_train):
+    for epoch_pre in range(opt.n_epochs_pretrain):
+        for i, samples in enumerate(dataloader_train):
 
-                # Configure input
-                real_samples = Variable(samples.type(Tensor))
+            # Configure input
+            real_samples = Variable(samples.type(Tensor))
 
-                # Generate a batch of images
-                recons_samples = autoencoderModel(real_samples)
+            # Generate a batch of images
+            recons_samples = autoencoderModel(real_samples)
 
-                # Loss measures generator's ability to fool the discriminator
-                a_loss = autoencoder_loss(recons_samples, real_samples)
+            # Loss measures generator's ability to fool the discriminator
+            a_loss = autoencoder_loss(recons_samples, real_samples)
 
-                # # Reset gradients (if you comment below line, it would be a mess. Think why?!!!!!!!!!)
-                optimizer_A.zero_grad()
+            # # Reset gradients (if you uncomment it, it would be a mess. Why?!!!!!!!!!!!!!!!)
+            optimizer_A.zero_grad()
 
-                a_loss.backward()
-                optimizer_A.step()
+            a_loss.backward()
+            optimizer_A.step()
 
-                batches_done = epoch_pre * len(dataloader_train) + i
-                if batches_done % opt.sample_interval == 0:
-                    print(
-                        "[Epoch %d/%d of pretraining] [Batch %d/%d] [A loss: %.3f]"
-                        % (epoch_pre + 1, opt.n_epochs_pretrain, i, len(dataloader_train), a_loss.item())
-                        , flush=True)
-    else:
-
-        # Loading the checkpoint
-        checkpoint = torch.load(os.path.join(opt.PATH, "aepretrained.pth"))
-
-        # Load models
-        autoencoderModel.load_state_dict(checkpoint['Autoencoder_state_dict'])
-
-        # Load optimizers
-        optimizer_A.load_state_dict(checkpoint['optimizer_A_state_dict'])
-
-        # Load losses
-        a_loss = checkpoint['a_loss']
-
-        # Load weights
-        autoencoderModel.eval()
+            batches_done = epoch_pre * len(dataloader_train) + i
+            if batches_done % opt.sample_interval == 0:
+                print(
+                    "[Epoch %d/%d of pretraining] [Batch %d/%d] [A loss: %.3f]"
+                    % (epoch_pre + 1, opt.n_epochs_pretrain, i, len(dataloader_train), a_loss.item())
+                    , flush=True)
 
     gen_iterations = 0
     for epoch in range(opt.n_epochs):
