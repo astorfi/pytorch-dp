@@ -36,8 +36,8 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=300, help="number of epochs of training")
-parser.add_argument("--n_epochs_pretrain", type=int, default=500,
+parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+parser.add_argument("--n_epochs_pretrain", type=int, default=1,
                     help="number of epochs of pretraining the autoencoder")
 parser.add_argument("--batch_size", type=int, default=512, help="size of the batches")
 parser.add_argument("--lr", type=float, default=0.001, help="adam: learning rate")
@@ -57,14 +57,15 @@ parser.add_argument("--multiplegpu", type=bool, default=True,
                     help="number of cpu threads to use during batch generation")
 parser.add_argument("--num_gpu", type=int, default=2, help="Number of GPUs in case of multiple GPU")
 
-parser.add_argument("--latent_dim", type=int, default=128, help="dimensionality of the latent space")
-parser.add_argument("--img_size", type=int, default=28, help="size of each image dimension")
+parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent noise space")
+parser.add_argument("--feature_size", type=int, default=1071, help="size of each image dimension")
 parser.add_argument("--channels", type=int, default=1, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=100, help="interval between samples")
 parser.add_argument("--epoch_time_show", type=bool, default=True, help="interval betwen image samples")
 parser.add_argument("--epoch_save_model_freq", type=int, default=100, help="number of epops per model save")
 parser.add_argument("--minibatch_averaging", type=bool, default=False, help="Minibatch averaging")
 
+parser.add_argument("--pretrained_status", type=bool, default=False, help="If want to use ae pretrained weights")
 parser.add_argument("--training", type=bool, default=True, help="Training status")
 parser.add_argument("--resume", type=bool, default=False, help="Training status")
 parser.add_argument("--finetuning", type=bool, default=False, help="Training status")
@@ -151,13 +152,13 @@ class Dataset:
 dataset_train_object = Dataset(data=trainData, transform=False)
 samplerRandom = torch.utils.data.sampler.RandomSampler(data_source=dataset_train_object, replacement=True)
 dataloader_train = DataLoader(dataset_train_object, batch_size=opt.batch_size,
-                              shuffle=False, num_workers=2, drop_last=True, sampler=samplerRandom)
+                              shuffle=True, num_workers=0, drop_last=True)
 
 # Test data loader
 dataset_test_object = Dataset(data=testData, transform=False)
 samplerRandom = torch.utils.data.sampler.RandomSampler(data_source=dataset_test_object, replacement=True)
 dataloader_test = DataLoader(dataset_test_object, batch_size=opt.batch_size,
-                             shuffle=False, num_workers=1, drop_last=True, sampler=samplerRandom)
+                             shuffle=True, num_workers=0, drop_last=True)
 
 # Generate random samples for test
 random_samples = next(iter(dataloader_test))
@@ -251,20 +252,20 @@ class Generator(nn.Module):
         self.linear1 = nn.Linear(opt.latent_dim, self.genDim)
         self.bn1 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
         self.activation1 = nn.ReLU()
-        self.linear2 = nn.Linear(opt.latent_dim, self.genDim)
+        self.linear2 = nn.Linear(self.genDim, self.genDim)
         self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
         self.activation2 = nn.Tanh()
 
     def forward(self, x):
         # Layer 1
         residual = x
-        temp = self.activation1(self.bn1(self.linear1(x)))
-        out1 = temp + residual
+        out1 = self.activation1(self.bn1(self.linear1(x)))
+        # out1 = temp + residual
 
         # Layer 2
         residual = out1
-        temp = self.activation2(self.bn2(self.linear2(out1)))
-        out2 = temp + residual
+        out2 = self.activation2(self.bn2(self.linear2(out1)))
+        # out2 = temp + residual
         return out2
 
 class Discriminator(nn.Module):
@@ -397,6 +398,11 @@ Tensor = torch.FloatTensor
 one = torch.FloatTensor([1])
 mone = one * -1
 
+# Adversarial ground truths
+# valid = Variable(Tensor(samples.shape[0]).fill_(1.0), requires_grad=False)
+# fake = Variable(Tensor(samples.shape[0]).fill_(0.0), requires_grad=False)
+input = torch.FloatTensor(opt.batch_size, feature_size)
+noise = torch.FloatTensor(opt.batch_size, opt.latent_dim)
 
 if torch.cuda.device_count() > 1 and opt.multiplegpu:
   print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -417,6 +423,8 @@ if opt.cuda:
     autoencoderDecoder.cuda()
     one, mone = one.cuda(), mone.cuda()
     Tensor = torch.cuda.FloatTensor
+    input = input.cuda()
+    noise = noise.cuda()
 
 # Weight initialization
 generatorModel.apply(weights_init)
@@ -470,45 +478,127 @@ if opt.training:
         autoencoderModel.eval()
         autoencoderDecoder.eval()
 
-    for epoch_pre in range(opt.n_epochs_pretrain):
-        for i, samples in enumerate(dataloader_train):
+    if not opt.pretrained_status:
+        for epoch_pre in range(opt.n_epochs_pretrain):
+            for i, samples in enumerate(dataloader_train):
 
-            # Configure input
-            real_samples = Variable(samples.type(Tensor))
+                # Configure input
+                real_samples = Variable(samples.type(Tensor))
 
-            # Generate a batch of images
-            recons_samples = autoencoderModel(real_samples)
+                # Generate a batch of images
+                recons_samples = autoencoderModel(real_samples)
 
-            # Loss measures generator's ability to fool the discriminator
-            a_loss = autoencoder_loss(recons_samples, real_samples)
+                # Loss measures generator's ability to fool the discriminator
+                a_loss = autoencoder_loss(recons_samples, real_samples)
 
-            # # Reset gradients (if you uncomment it, it would be a mess. Why?!!!!!!!!!!!!!!!)
-            optimizer_A.zero_grad()
+                # # Reset gradients (if you comment below line, it would be a mess. Think why?!!!!!!!!!)
+                optimizer_A.zero_grad()
 
-            a_loss.backward()
-            optimizer_A.step()
+                a_loss.backward()
+                optimizer_A.step()
 
-            batches_done = epoch_pre * len(dataloader_train) + i
-            if batches_done % opt.sample_interval == 0:
-                print(
-                    "[Epoch %d/%d of pretraining] [Batch %d/%d] [A loss: %.3f]"
-                    % (epoch_pre + 1, opt.n_epochs_pretrain, i, len(dataloader_train), a_loss.item())
-                    , flush=True)
+                batches_done = epoch_pre * len(dataloader_train) + i
+                if batches_done % opt.sample_interval == 0:
+                    print(
+                        "[Epoch %d/%d of pretraining] [Batch %d/%d] [A loss: %.3f]"
+                        % (epoch_pre + 1, opt.n_epochs_pretrain, i, len(dataloader_train), a_loss.item())
+                        , flush=True)
+
+        torch.save({
+            'Autoencoder_state_dict': autoencoderModel.state_dict(),
+            'optimizer_A_state_dict': optimizer_A.state_dict(),
+        }, os.path.join(opt.expPATH, "aepretrained.pth"))
+    else:
+
+        print('loading pretrained autoencoder...')
+
+        # Loading the checkpoint
+        checkpoint = torch.load(os.path.join(opt.expPATH, "aepretrained.pth"))
+
+        # Load models
+        autoencoderModel.load_state_dict(checkpoint['Autoencoder_state_dict'])
+
+        # Load optimizers
+        optimizer_A.load_state_dict(checkpoint['optimizer_A_state_dict'])
+
+        # Load weights
+        autoencoderModel.eval()
 
     gen_iterations = 0
     for epoch in range(opt.n_epochs):
         epoch_start = time.time()
-        for i, samples in enumerate(dataloader_train):
+        traindata_iter = iter(dataloader_train)
+        # for i, samples in enumerate(dataloader_train):
+        i=0
+        for i in range(len(traindata_iter)):
 
-            # Adversarial ground truths
-            valid = Variable(Tensor(samples.shape[0]).fill_(1.0), requires_grad=False)
-            fake = Variable(Tensor(samples.shape[0]).fill_(0.0), requires_grad=False)
+            # ---------------------
+            #  Train Discriminator
+            # ---------------------
 
-            # Configure input
-            real_samples = Variable(samples.type(Tensor))
+            # # Configure input
+            # real_samples = Variable(samples.type(Tensor))
 
-            # Sample noise as generator input
-            z = torch.randn(samples.shape[0], opt.latent_dim, device=device)
+            # # Sample noise as generator input
+            # z = torch.randn(opt.batch_size, opt.latent_dim, device=device)
+            #
+            # # Generate a batch of images
+            # fake_samples = generatorModel(z)
+
+            for p in discriminatorModel.parameters():  # reset requires_grad
+                p.requires_grad = True
+
+            # train the discriminator n_iter_D times
+            if gen_iterations < 25 or gen_iterations % 500 == 0:
+                n_iter_D = 100
+            else:
+                n_iter_D = opt.n_iter_D
+            j = 0
+            while j < n_iter_D:
+                j += 1
+
+                # clamp parameters to a cube
+                for p in discriminatorModel.parameters():
+                    p.data.clamp_(opt.clamp_lower, opt.clamp_upper)
+
+                # reset gradients of discriminator
+                optimizer_D.zero_grad()
+
+                # Load data
+                try:
+                    input = next(traindata_iter)
+                except StopIteration:
+                    traindata_iter = iter(dataloader_train)
+                    input = next(traindata_iter)
+
+                if opt.cuda:
+                    input = input.cuda()
+
+                # Turn to variable
+                inputv = Variable(input)
+
+                errD_real = torch.mean(discriminatorModel(inputv).view(-1))
+
+                # Measure discriminator's ability to classify real from generated samples
+                # The detach() method constructs a new view on a tensor which is declared
+                # not to need gradients, i.e., it is to be excluded from further tracking of
+                # operations, and therefore the subgraph involving this view is not recorded.
+                # Refer to http://www.bnikolic.co.uk/blog/pytorch-detach.html.
+
+                # train with fake
+                noise.resize_(opt.batch_size, opt.latent_dim).normal_(0, 1)
+                with torch.no_grad():
+                    noisev = Variable(noise)  # totally freeze netG
+                    fake = generatorModel(noisev)
+
+                fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
+                errD_fake = torch.mean(discriminatorModel(fake_decoded.detach()).view(-1))
+
+                # Backward
+                errD = errD_fake - errD_real
+
+                # Optimizer step
+                optimizer_D.step()
 
             # -----------------
             #  Train Generator
@@ -534,92 +624,57 @@ if opt.training:
             # Zero grads
             optimizer_G.zero_grad()
 
+            # Sample noise as generator input
+            noise = torch.randn(opt.batch_size, opt.latent_dim, device=device)
+            noisev = Variable(noise)
+
             # Generate a batch of images
-            fake_samples = generatorModel(z)
+            fake = generatorModel(noisev)
 
             # uncomment if there is no autoencoder
-            fake_samples = torch.squeeze(autoencoderDecoder(fake_samples.unsqueeze(dim=2)))
+            fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
 
             # Loss measures generator's ability to fool the discriminator
-            errG = torch.mean(discriminatorModel(fake_samples).view(-1))
-            errG.backward(one)
+            errG = -torch.mean(discriminatorModel(fake_decoded).view(-1))
+            errG.backward()
 
             # read more at https://discuss.pytorch.org/t/why-do-we-need-to-set-the-gradients-manually-to-zero-in-pytorch/4903/4
             optimizer_G.step()
             gen_iterations += 1
 
-            # ---------------------
-            #  Train Discriminator
-            # ---------------------
-
-            for p in discriminatorModel.parameters():  # reset requires_grad
-                p.requires_grad = True
-
-            # train the discriminator n_iter_D times
-            if gen_iterations < 25 or gen_iterations % 500 == 0:
-                n_iter_D = 100
-            else:
-                n_iter_D = opt.n_iter_D
-            j = 0
-            while j < n_iter_D:
-                j += 1
-
-                # clamp parameters to a cube
-                for p in discriminatorModel.parameters():
-                    p.data.clamp_(opt.clamp_lower, opt.clamp_upper)
-
-                # reset gradients of discriminator
-                optimizer_D.zero_grad()
-
-                errD_real = torch.mean(discriminatorModel(real_samples).view(-1))
-                errD_real.backward(one)
-
-                # Measure discriminator's ability to classify real from generated samples
-                # The detach() method constructs a new view on a tensor which is declared
-                # not to need gradients, i.e., it is to be excluded from further tracking of
-                # operations, and therefore the subgraph involving this view is not recorded.
-                # Refer to http://www.bnikolic.co.uk/blog/pytorch-detach.html.
-
-                errD_fake = torch.mean(discriminatorModel(fake_samples.detach()).view(-1))
-                errD_fake.backward(mone)
-                errD = errD_real - errD_fake
-
-                # Optimizer step
-                optimizer_D.step()
-
-        with torch.no_grad():
-
-            # Variables
-            real_samples_test = next(iter(dataloader_test))
-            real_samples_test = Variable(real_samples_test.type(Tensor))
-            z = torch.randn(samples.shape[0], opt.latent_dim, device=device)
-
-            # Generator
-            fake_samples_test_temp = generatorModel(z)
-            fake_samples_test = torch.squeeze(autoencoderDecoder(fake_samples_test_temp.unsqueeze(dim=2)))
-
-            # Discriminator
-            # F.sigmoid() is needed as the discriminator outputs are logits without any sigmoid.
-            out_real_test = discriminatorModel(real_samples_test).view(-1)
-            accuracy_real_test = discriminator_accuracy(F.sigmoid(out_real_test), valid)
-
-            out_fake_test = discriminatorModel(fake_samples_test.detach()).view(-1)
-            accuracy_fake_test = discriminator_accuracy(F.sigmoid(out_fake_test), fake)
-
-            # Test autoencoder
-            reconst_samples_test = autoencoderModel(real_samples_test)
-            a_loss_test = autoencoder_loss(reconst_samples_test, real_samples_test)
+        # with torch.no_grad():
+        #
+        #     # Variables
+        #     real_samples_test = next(iter(dataloader_test))
+        #     real_samples_test = Variable(real_samples_test.type(Tensor))
+        #     z = torch.randn(samples.shape[0], opt.latent_dim, device=device)
+        #
+        #     # Generator
+        #     fake_samples_test_temp = generatorModel(z)
+        #     fake_samples_test = torch.squeeze(autoencoderDecoder(fake_samples_test_temp.unsqueeze(dim=2)))
+        #
+        #     # Discriminator
+        #     # F.sigmoid() is needed as the discriminator outputs are logits without any sigmoid.
+        #     out_real_test = discriminatorModel(real_samples_test).view(-1)
+        #     accuracy_real_test = discriminator_accuracy(F.sigmoid(out_real_test), valid)
+        #
+        #     out_fake_test = discriminatorModel(fake_samples_test.detach()).view(-1)
+        #     accuracy_fake_test = discriminator_accuracy(F.sigmoid(out_fake_test), fake)
+        #
+        #     # Test autoencoder
+        #     reconst_samples_test = autoencoderModel(real_samples_test)
+        #     a_loss_test = autoencoder_loss(reconst_samples_test, real_samples_test)
 
         print('TRAIN: [Epoch %d/%d] [Batch %d/%d] Loss_D: %.3f Loss_G: %.3f Loss_D_real: %.3f Loss_D_fake %.3f'
               % (epoch + 1, opt.n_epochs, i, len(dataloader_train),
                  errD.item(), errG.item(), errD_real.item(), errD_fake.item()), flush=True)
 
-        print(
-            "TEST: [Epoch %d/%d] [Batch %d/%d] [A loss: %.2f] [real accuracy: %.2f] [fake accuracy: %.2f]"
-            % (epoch + 1, opt.n_epochs, i, len(dataloader_train),
-               a_loss_test.item(), accuracy_real_test,
-               accuracy_fake_test)
-            , flush=True)
+        # print(
+        #     "TEST: [Epoch %d/%d] [Batch %d/%d] [A loss: %.2f] [real accuracy: %.2f] [fake accuracy: %.2f]"
+        #     % (epoch + 1, opt.n_epochs, i, len(dataloader_train),
+        #        a_loss_test.item(), accuracy_real_test,
+        #        accuracy_fake_test)
+        #     , flush=True)
 
         # End of epoch
         epoch_end = time.time()
