@@ -36,12 +36,12 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+parser.add_argument("--n_epochs", type=int, default=300, help="number of epochs of training")
 parser.add_argument("--n_epochs_pretrain", type=int, default=100,
                     help="number of epochs of pretraining the autoencoder")
-parser.add_argument("--batch_size", type=int, default=512, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.00001, help="adam: learning rate")
-parser.add_argument("--weight_decay", type=float, default=0.0001, help="l2 regularization")
+parser.add_argument("--batch_size", type=int, default=100, help="size of the batches")
+parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
+parser.add_argument("--weight_decay", type=float, default=0.00001, help="l2 regularization")
 parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
@@ -57,7 +57,7 @@ parser.add_argument("--multiplegpu", type=bool, default=True,
                     help="number of cpu threads to use during batch generation")
 parser.add_argument("--num_gpu", type=int, default=2, help="Number of GPUs in case of multiple GPU")
 
-parser.add_argument("--latent_dim", type=int, default=100, help="dimensionality of the latent noise space")
+parser.add_argument("--latent_dim", type=int, default=128, help="dimensionality of the latent noise space")
 parser.add_argument("--feature_size", type=int, default=1071, help="size of each image dimension")
 parser.add_argument("--channels", type=int, default=1, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=100, help="interval between samples")
@@ -232,8 +232,6 @@ class Autoencoder(nn.Module):
                                groups=1, bias=True, padding_mode='zeros'),
             nn.Sigmoid(),
         )
-        # self.decoder = nn.Sequential(nn.Linear(128, dataset_train_object.featureSize)
-        #                              , nn.Sigmoid())
 
     def forward(self, x):
         x = self.encoder(x.view(-1, 1, x.shape[1]))
@@ -254,68 +252,16 @@ class Autoencoder(nn.Module):
 #         self.activation1 = nn.ReLU()
 #         self.linear2 = nn.Linear(self.genDim, self.genDim)
 #         self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-#         self.activation2 = nn.Tanh()
-#
+#         self.activation2 = nn.ReLU()
+#         self.linear3 = nn.Linear(self.genDim, self.genDim)
+#         # self.bn3 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
+#         self.activation3 = nn.Tanh()
+# 
 #     def forward(self, x):
-#         # Layer 1
-#         residual = x
-#         out1 = self.activation1(self.bn1(self.linear1(x)))
-#         # out1 = temp + residual
-#
-#         # Layer 2
-#         residual = out1
-#         out2 = self.activation2(self.bn2(self.linear2(out1)))
-#         # out2 = temp + residual
-#         return out2
-
-# class Generator(nn.Module):
-#     def __init__(self):
-#         super(Generator, self).__init__()
-#         ngf = 4
-#         self.conv1 = nn.Sequential(
-#         nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0, bias=False),
-#         nn.BatchNorm1d(ngf * 16),
-#         nn.PReLU(),
-#         )
-#
-#         self.conv2 = nn.Sequential(
-#         nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1, bias=False),
-#         nn.BatchNorm1d(ngf * 8),
-#         nn.PReLU(),
-#         )
-#
-#         self.conv3 = nn.Sequential(
-#         nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
-#         nn.BatchNorm1d(ngf * 4),
-#         nn.PReLU(),
-#         )
-#
-#         self.conv4 = nn.Sequential(
-#         nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-#         nn.BatchNorm1d(ngf * 2),
-#         nn.PReLU(),
-#         )
-#
-#         self.conv5 = nn.Sequential(
-#         nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1, bias=False),
-#         nn.BatchNorm1d(ngf),
-#         nn.PReLU(),
-#         )
-#
-#         self.conv6 = nn.Sequential(
-#         nn.ConvTranspose1d(ngf, 1, 4, 2, 1, bias=False),
-#         nn.Tanh(),
-#         )
-#
-#     def forward(self, x):
-#         x = x.view(-1, x.shape[1], 1)
-#         out = self.conv1(x)
-#         out = self.conv2(out)
-#         out = self.conv3(out)
-#         out = self.conv4(out)
-#         out = self.conv5(out)
-#         out = self.conv6(out)
-#         return torch.squeeze(out)
+#         out = self.activation1(self.bn1(self.linear1(x)))
+#         out = self.activation2(self.bn2(self.linear2(out)))
+#         out = self.activation3(self.linear1(out))
+#         return out
 
 class Generator(nn.Module):
     def __init__(self):
@@ -323,20 +269,20 @@ class Generator(nn.Module):
         ngf = 4
         self.main = nn.Sequential(
         nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0, bias=False),
-        nn.BatchNorm1d(ngf * 16),
-        nn.LeakyReLU(0.2, inplace=True),
+        # nn.BatchNorm1d(ngf * 16, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
         nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf * 8),
-        nn.LeakyReLU(0.2, inplace=True),
+        nn.BatchNorm1d(ngf * 8, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
         nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf * 4),
-        nn.LeakyReLU(0.2, inplace=True),
+        nn.BatchNorm1d(ngf * 4, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
         nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf * 2),
-        nn.LeakyReLU(0.2, inplace=True),
+        nn.BatchNorm1d(ngf * 2, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
         nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf),
-        nn.LeakyReLU(0.2, inplace=True),
+        nn.BatchNorm1d(ngf, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
         nn.ConvTranspose1d(ngf, 1, 4, 2, 1, bias=False),
         nn.Tanh(),
         )
@@ -345,6 +291,7 @@ class Generator(nn.Module):
         x = x.view(-1, x.shape[1], 1)
         out = self.main(x)
         return torch.squeeze(out)
+
 
 class Discriminator(nn.Module):
     def __init__(self):
@@ -379,10 +326,111 @@ class Discriminator(nn.Module):
         output = self.model(x)
         return output
 
-
+# class Discriminator(nn.Module):
+#     def __init__(self):
+#         super(Discriminator, self).__init__()
+#         ndf = 16
+#         self.conv1 = nn.Sequential(
+#             # input is (nc) x 64 x 64
+#             nn.Conv1d(1, ndf, 8, 4, 1, bias=False),
+#             nn.LeakyReLU(0.2, inplace=True)
+#         )
+#         self.conv2 = nn.Sequential(
+#             # state size. (ndf) x 32 x 32
+#             nn.Conv1d(ndf, ndf * 2, 8, 4, 1, bias=False),
+#             nn.BatchNorm1d(ndf * 2),
+#             nn.LeakyReLU(0.2, inplace=True),
+#         )
+#
+#         self.conv3 = nn.Sequential(
+#             # state size. (ndf*2) x 16 x 16
+#             nn.Conv1d(ndf * 2, ndf * 4, 8, 4, 1, bias=False),
+#             nn.BatchNorm1d(ndf * 4),
+#             nn.LeakyReLU(0.2, inplace=True),
+#         )
+#
+#         self.conv4 = nn.Sequential(
+#             # state size. (ndf*4) x 8 x 8
+#             nn.Conv1d(ndf * 4, ndf * 8, 8, 4, 1, bias=False),
+#             nn.BatchNorm1d(ndf * 8),
+#             nn.LeakyReLU(0.2, inplace=True),
+#         )
+#
+#         self.conv5 = nn.Sequential(
+#             # state size. (ndf*8) x 4 x 4
+#             nn.Conv1d(ndf * 8, 1, 3, 1, 0, bias=False),
+#             nn.Sigmoid()
+#         )
+#
+#     def forward(self, input):
+#         out = self.conv1(input.view(-1, 1, input.shape[1]))
+#         out = self.conv2(out)
+#         out = self.conv3(out)
+#         out = self.conv4(out)
+#         out = self.conv5(out)
+#         return torch.squeeze(out, dim=2)
+    
 ###############
 ### Lossess ###
 ###############
+
+def _gradient_penalty(real_data, generated_data):
+    batch_size = real_data.size()[0]
+
+    # Calculate interpolation
+    alpha = torch.rand(batch_size, 1, 1, 1)
+    alpha = alpha.expand_as(real_data)
+    if self.use_cuda:
+        alpha = alpha.cuda()
+    interpolated = alpha * real_data.data + (1 - alpha) * generated_data.data
+    interpolated = Variable(interpolated, requires_grad=True)
+    if self.use_cuda:
+        interpolated = interpolated.cuda()
+
+    # Calculate probability of interpolated examples
+    prob_interpolated = self.D(interpolated)
+
+    # Calculate gradients of probabilities with respect to examples
+    gradients = torch_grad(outputs=prob_interpolated, inputs=interpolated,
+                           grad_outputs=torch.ones(
+                               prob_interpolated.size()).cuda() if self.use_cuda else torch.ones(
+                               prob_interpolated.size()),
+                           create_graph=True, retain_graph=True)[0]
+
+    # Gradients have shape (batch_size, num_channels, img_width, img_height),
+    # so flatten to easily take norm per example in batch
+    gradients = gradients.view(batch_size, -1)
+    self.losses['gradient_norm'].append(gradients.norm(2, dim=1).mean().data[0])
+
+    # Derivatives of the gradient close to 0 can cause problems because of
+    # the square root, so manually calculate norm and add epsilon
+    gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+
+    # Return gradient penalty
+    return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
+
+# https://github.com/caogang/wgan-gp/blob/master/gan_mnist.py
+def calc_gradient_penalty(netD, real_data, fake_data):
+    #print real_data.size()
+    alpha = torch.rand(BATCH_SIZE, 1)
+    alpha = alpha.expand(real_data.size())
+    alpha = alpha.cuda(gpu) if use_cuda else alpha
+
+    interpolates = alpha * real_data + ((1 - alpha) * fake_data)
+
+    if use_cuda:
+        interpolates = interpolates.cuda(gpu)
+    interpolates = autograd.Variable(interpolates, requires_grad=True)
+
+    disc_interpolates = netD(interpolates)
+
+    gradients = autograd.grad(outputs=disc_interpolates, inputs=interpolates,
+                              grad_outputs=torch.ones(disc_interpolates.size()).cuda(gpu) if use_cuda else torch.ones(
+                                  disc_interpolates.size()),
+                              create_graph=True, retain_graph=True, only_inputs=True)[0]
+
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
+    return gradient_penalty
 
 def generator_loss(y_fake, y_true):
     """
@@ -666,7 +714,7 @@ if opt.training:
                 inputv = Variable(input)
 
                 errD_real = torch.mean(discriminatorModel(inputv), dim=0)
-                errD_real.backward(one)
+                # errD_real.backward(one)
 
                 # Measure discriminator's ability to classify real from generated samples
                 # The detach() method constructs a new view on a tensor which is declared
@@ -675,18 +723,19 @@ if opt.training:
                 # Refer to http://www.bnikolic.co.uk/blog/pytorch-detach.html.
 
                 # train with fake
-                noise.resize_(opt.batch_size, opt.latent_dim).normal_(0, 1)
+                # noise.resize_(opt.batch_size, opt.latent_dim).normal_(0, 1)
+                noise = torch.randn(opt.batch_size, opt.latent_dim, device=device)
                 with torch.no_grad():
                     noisev = Variable(noise)  # totally freeze netG
                     fake = generatorModel(noisev)
 
                 fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
                 errD_fake = torch.mean(discriminatorModel(fake_decoded.detach()),dim=0)
-                errD_fake.backward(mone)
+                # errD_fake.backward(mone)
 
                 # Backward
                 errD = errD_real - errD_fake
-                # errD.backward()
+                errD.backward(one)
 
                 # Optimizer step
                 optimizer_D.step()
@@ -726,7 +775,7 @@ if opt.training:
             fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
 
             # Loss measures generator's ability to fool the discriminator
-            errG = torch.mean(discriminatorModel(fake_decoded),dim=0)
+            errG = torch.mean(discriminatorModel(fake_decoded), dim=0)
             errG.backward(one)
 
             # read more at https://discuss.pytorch.org/t/why-do-we-need-to-set-the-gradients-manually-to-zero-in-pytorch/4903/4
@@ -792,7 +841,7 @@ if opt.training:
 if opt.finetuning:
 
     # Loading the checkpoint
-    checkpoint = torch.load(os.path.join(opt.PATH, "model_epoch_100.pth"))
+    checkpoint = torch.load(os.path.join(opt.PATH, "model_epoch_200.pth"))
 
     # Setup model
     generatorModel = Generator()
