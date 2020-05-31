@@ -36,12 +36,12 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training")
 parser.add_argument("--n_epochs_pretrain", type=int, default=300,
                     help="number of epochs of pretraining the autoencoder")
 parser.add_argument("--batch_size", type=int, default=512, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.001, help="adam: learning rate")
-parser.add_argument("--weight_decay", type=float, default=0.0001, help="l2 regularization")
+parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
+parser.add_argument("--weight_decay", type=float, default=0.001, help="l2 regularization")
 parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
@@ -62,15 +62,15 @@ parser.add_argument("--feature_size", type=int, default=1071, help="size of each
 parser.add_argument("--channels", type=int, default=1, help="number of image channels")
 parser.add_argument("--sample_interval", type=int, default=100, help="interval between samples")
 parser.add_argument("--epoch_time_show", type=bool, default=True, help="interval betwen image samples")
-parser.add_argument("--epoch_save_model_freq", type=int, default=100, help="number of epops per model save")
+parser.add_argument("--epoch_save_model_freq", type=int, default=10, help="number of epops per model save")
 parser.add_argument("--minibatch_averaging", type=bool, default=False, help="Minibatch averaging")
 
 parser.add_argument("--pretrained_status", type=bool, default=True, help="If want to use ae pretrained weights")
-parser.add_argument("--training", type=bool, default=False, help="Training status")
+parser.add_argument("--training", type=bool, default=True, help="Training status")
 parser.add_argument("--resume", type=bool, default=False, help="Training status")
 parser.add_argument("--finetuning", type=bool, default=False, help="Training status")
 parser.add_argument("--generate", type=bool, default=False, help="Generating Sythetic Data")
-parser.add_argument("--evaluate", type=bool, default=True, help="Evaluation status")
+parser.add_argument("--evaluate", type=bool, default=False, help="Evaluation status")
 parser.add_argument("--expPATH", type=str, default=os.path.expanduser('~/experiments/pytorch/model/'+experimentName),
                     help="Training status")
 opt = parser.parse_args()
@@ -245,28 +245,106 @@ class Autoencoder(nn.Module):
         return torch.squeeze(x)
 
 
+# class Generator(nn.Module):
+#     def __init__(self):
+#         super(Generator, self).__init__()
+#         self.genDim = 128
+#         self.linear1 = nn.Linear(opt.latent_dim, self.genDim)
+#         self.bn1 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
+#         self.activation1 = nn.ReLU()
+#         self.linear2 = nn.Linear(self.genDim, self.genDim)
+#         self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
+#         self.activation2 = nn.Tanh()
+#
+#     def forward(self, x):
+#         # Layer 1
+#         residual = x
+#         out1 = self.activation1(self.bn1(self.linear1(x)))
+#         # out1 = temp + residual
+#
+#         # Layer 2
+#         residual = out1
+#         out2 = self.activation2(self.bn2(self.linear2(out1)))
+#         # out2 = temp + residual
+#         return out2
+
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
-        self.genDim = 128
-        self.linear1 = nn.Linear(opt.latent_dim, self.genDim)
-        self.bn1 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-        self.activation1 = nn.ReLU()
-        self.linear2 = nn.Linear(self.genDim, self.genDim)
-        self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-        self.activation2 = nn.Tanh()
+        ngf = 4
+        self.conv1 = nn.Sequential(
+        nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0, bias=False),
+        nn.BatchNorm1d(ngf * 16),
+        nn.PReLU(),
+        )
+
+        self.conv2 = nn.Sequential(
+        nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1, bias=False),
+        nn.BatchNorm1d(ngf * 8),
+        nn.PReLU(),
+        )
+
+        self.conv3 = nn.Sequential(
+        nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+        nn.BatchNorm1d(ngf * 4),
+        nn.PReLU(),
+        )
+
+        self.conv4 = nn.Sequential(
+        nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+        nn.BatchNorm1d(ngf * 2),
+        nn.PReLU(),
+        )
+
+        self.conv5 = nn.Sequential(
+        nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1, bias=False),
+        nn.BatchNorm1d(ngf),
+        nn.PReLU(),
+        )
+
+        self.conv6 = nn.Sequential(
+        nn.ConvTranspose1d(ngf, 1, 4, 2, 1, bias=False),
+        nn.Tanh(),
+        )
 
     def forward(self, x):
-        # Layer 1
-        residual = x
-        out1 = self.activation1(self.bn1(self.linear1(x)))
-        # out1 = temp + residual
+        x = x.view(-1, x.shape[1], 1)
+        out = self.conv1(x)
+        out = self.conv2(out)
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.conv5(out)
+        out = self.conv6(out)
+        return torch.squeeze(out)
 
-        # Layer 2
-        residual = out1
-        out2 = self.activation2(self.bn2(self.linear2(out1)))
-        # out2 = temp + residual
-        return out2
+# class Generator(nn.Module):
+#     def __init__(self):
+#         super(Generator, self).__init__()
+#         ngf = 4
+#         self.main = nn.Sequential(
+#         nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0, bias=False),
+#         nn.BatchNorm1d(ngf * 16),
+#         nn.PReLU(),
+#         nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1, bias=False),
+#         nn.BatchNorm1d(ngf * 8),
+#         nn.PReLU(),
+#         nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+#         nn.BatchNorm1d(ngf * 4),
+#         nn.PReLU(),
+#         nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+#         nn.BatchNorm1d(ngf * 2),
+#         nn.PReLU(),
+#         nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1, bias=False),
+#         nn.BatchNorm1d(ngf),
+#         nn.PReLU(),
+#         nn.ConvTranspose1d(ngf, 1, 4, 2, 1, bias=False),
+#         nn.Tanh(),
+#         )
+#
+#     def forward(self, x):
+#         x = x.view(-1, x.shape[1], 1)
+#         out = self.main(x)
+#         return torch.squeeze(out)
 
 class Discriminator(nn.Module):
     def __init__(self):
@@ -388,8 +466,8 @@ def weights_init(m):
 #############
 
 # Initialize generator and discriminator
-generatorModel = Generator()
 discriminatorModel = Discriminator()
+generatorModel = Generator()
 autoencoderModel = Autoencoder()
 autoencoderDecoder = autoencoderModel.decoder
 
@@ -668,7 +746,7 @@ if opt.training:
         #     reconst_samples_test = autoencoderModel(real_samples_test)
         #     a_loss_test = autoencoder_loss(reconst_samples_test, real_samples_test)
 
-        print('TRAIN: [Epoch %d/%d] [Batch %d/%d] Loss_D: %.3f Loss_G: %.3f Loss_D_real: %.3f Loss_D_fake %.3f'
+        print('TRAIN: [Epoch %d/%d] [Batch %d/%d] Loss_D: %.6f Loss_G: %.6f Loss_D_real: %.6f Loss_D_fake %.6f'
               % (epoch + 1, opt.n_epochs, i, len(dataloader_train),
                  errD.item(), errG.item(), errD_real.item(), errD_fake.item()), flush=True)
 
@@ -699,7 +777,7 @@ if opt.training:
 
             # keep only the most recent 10 saved models
             # ls -d -1tr /home/sina/experiments/pytorch/model/* | head -n -10 | xargs -d '\n' rm -f
-            call("ls -d -1tr " + opt.expPATH + "/*" + " | head -n -10 | xargs -d '\n' rm -f", shell=True)
+            # call("ls -d -1tr " + opt.expPATH + "/*" + " | head -n -10 | xargs -d '\n' rm -f", shell=True)
 
 if opt.finetuning:
 
