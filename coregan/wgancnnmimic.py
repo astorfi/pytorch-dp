@@ -36,11 +36,11 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=300, help="number of epochs of training")
-parser.add_argument("--n_epochs_pretrain", type=int, default=300,
+parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+parser.add_argument("--n_epochs_pretrain", type=int, default=100,
                     help="number of epochs of pretraining the autoencoder")
 parser.add_argument("--batch_size", type=int, default=512, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
+parser.add_argument("--lr", type=float, default=0.00001, help="adam: learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.0001, help="l2 regularization")
 parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
@@ -65,7 +65,7 @@ parser.add_argument("--epoch_time_show", type=bool, default=True, help="interval
 parser.add_argument("--epoch_save_model_freq", type=int, default=10, help="number of epops per model save")
 parser.add_argument("--minibatch_averaging", type=bool, default=False, help="Minibatch averaging")
 
-parser.add_argument("--pretrained_status", type=bool, default=False, help="If want to use ae pretrained weights")
+parser.add_argument("--pretrained_status", type=bool, default=True, help="If want to use ae pretrained weights")
 parser.add_argument("--training", type=bool, default=True, help="Training status")
 parser.add_argument("--resume", type=bool, default=False, help="Training status")
 parser.add_argument("--finetuning", type=bool, default=False, help="Training status")
@@ -206,27 +206,27 @@ class Autoencoder(nn.Module):
         self.decoder = nn.Sequential(
             nn.ConvTranspose1d(in_channels=32 * n_channels_base, out_channels=16 * n_channels_base, kernel_size=5, stride=1, padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.ConvTranspose1d(in_channels=16 * n_channels_base, out_channels=8 * n_channels_base, kernel_size=5, stride=4, padding=0,
                                dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(8 * n_channels_base),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.ConvTranspose1d(in_channels=8 * n_channels_base, out_channels=4 * n_channels_base, kernel_size=7, stride=4,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(4 * n_channels_base),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.ConvTranspose1d(in_channels=4 * n_channels_base, out_channels=2 * n_channels_base, kernel_size=7, stride=3,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(2 * n_channels_base),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.ConvTranspose1d(in_channels=2 * n_channels_base, out_channels=n_channels_base, kernel_size=7, stride=2,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(n_channels_base),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.ConvTranspose1d(in_channels=n_channels_base, out_channels=1, kernel_size=3, stride=2,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
@@ -324,19 +324,19 @@ class Generator(nn.Module):
         self.main = nn.Sequential(
         nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0, bias=False),
         nn.BatchNorm1d(ngf * 16),
-        nn.ReLU(True),
+        nn.LeakyReLU(0.2, inplace=True),
         nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1, bias=False),
         nn.BatchNorm1d(ngf * 8),
-        nn.ReLU(True),
+        nn.LeakyReLU(0.2, inplace=True),
         nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
         nn.BatchNorm1d(ngf * 4),
-        nn.ReLU(True),
+        nn.LeakyReLU(0.2, inplace=True),
         nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
         nn.BatchNorm1d(ngf * 2),
-        nn.ReLU(True),
+        nn.LeakyReLU(0.2, inplace=True),
         nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1, bias=False),
         nn.BatchNorm1d(ngf),
-        nn.ReLU(True),
+        nn.LeakyReLU(0.2, inplace=True),
         nn.ConvTranspose1d(ngf, 1, 4, 2, 1, bias=False),
         nn.Tanh(),
         )
@@ -453,14 +453,22 @@ def weights_init(m):
     """
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        torch.nn.init.xavier_uniform_(m.weight)
-        # nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.2)
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
-    if type(m) == nn.Linear:
-        torch.nn.init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
+
+    # classname = m.__class__.__name__
+    # if classname.find('Conv') != -1:
+    #     nn.init.xavier_normal_(m.weight.data)
+    #     # nn.init.normal_(m.weight.data, 0.0, 0.2)
+    # elif classname.find('BatchNorm') != -1:
+    #     nn.init.normal_(m.weight.data, 1.0, 0.2)
+    #     nn.init.constant_(m.bias.data, 0)
+    #     # nn.init.xavier_uniform_(m.weight)
+    # if type(m) == nn.Linear:
+    #     nn.init.xavier_uniform_(m.weight)
+    #     m.bias.data.fill_(0.01)
 
 
 #############
