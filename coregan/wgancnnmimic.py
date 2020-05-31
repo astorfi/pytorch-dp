@@ -36,7 +36,7 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
+parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
 parser.add_argument("--n_epochs_pretrain", type=int, default=100,
                     help="number of epochs of pretraining the autoencoder")
 parser.add_argument("--batch_size", type=int, default=100, help="size of the batches")
@@ -65,7 +65,7 @@ parser.add_argument("--epoch_time_show", type=bool, default=True, help="interval
 parser.add_argument("--epoch_save_model_freq", type=int, default=10, help="number of epops per model save")
 parser.add_argument("--minibatch_averaging", type=bool, default=False, help="Minibatch averaging")
 
-parser.add_argument("--pretrained_status", type=bool, default=False, help="If want to use ae pretrained weights")
+parser.add_argument("--pretrained_status", type=bool, default=True, help="If want to use ae pretrained weights")
 parser.add_argument("--training", type=bool, default=True, help="Training status")
 parser.add_argument("--resume", type=bool, default=False, help="Training status")
 parser.add_argument("--finetuning", type=bool, default=False, help="Training status")
@@ -249,50 +249,6 @@ class Autoencoder(nn.Module):
         return torch.squeeze(x)
 
 
-# class Generator(nn.Module):
-#     def __init__(self):
-#         super(Generator, self).__init__()
-#         self.genDim = 128
-#         self.linear1 = nn.Linear(opt.latent_dim, self.genDim)
-#         self.bn1 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-#         self.activation1 = nn.ReLU()
-#         self.linear2 = nn.Linear(self.genDim, self.genDim)
-#         self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-#         self.activation2 = nn.ReLU()
-#         self.linear3 = nn.Linear(self.genDim, self.genDim)
-#         # self.bn3 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-#         self.activation3 = nn.Tanh()
-#
-#     def forward(self, x):
-#         out = self.activation1(self.bn1(self.linear1(x)))
-#         out = self.activation2(self.bn2(self.linear2(out)))
-#         out = self.activation3(self.linear1(out))
-#         return out
-
-# class Generator(nn.Module):
-#     def __init__(self):
-#         super(Generator, self).__init__()
-#         self.genDim = 128
-#         self.linear1 = nn.Linear(opt.latent_dim, self.genDim)
-#         self.bn1 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-#         self.activation1 = nn.ReLU()
-#         self.linear2 = nn.Linear(opt.latent_dim, self.genDim)
-#         self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
-#         self.activation2 = nn.Tanh()
-#
-#     def forward(self, x):
-#         # Layer 1
-#         residual = x
-#         temp = self.activation1(self.bn1(self.linear1(x)))
-#         out1 = temp + residual
-#
-#         # Layer 2
-#         residual = out1
-#         temp = self.activation2(self.bn2(self.linear2(out1)))
-#         out2 = temp + residual
-#         return out2
-
-
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
@@ -323,83 +279,83 @@ class Generator(nn.Module):
         return torch.squeeze(out)
 
 
-class Discriminator(nn.Module):
-    def __init__(self):
-        super(Discriminator, self).__init__()
-
-        # Discriminator's parameters
-        self.disDim = 256
-
-        # The minibatch averaging setup
-        ma_coef = 1
-        if opt.minibatch_averaging:
-            ma_coef = ma_coef * 2
-
-        self.model = nn.Sequential(
-            nn.Linear(ma_coef * dataset_train_object.featureSize, self.disDim),
-            nn.ReLU(True),
-            nn.Linear(self.disDim, int(self.disDim)),
-            nn.ReLU(True),
-            nn.Linear(self.disDim, int(self.disDim)),
-            nn.ReLU(True),
-            nn.Linear(int(self.disDim), 1)
-        )
-
-    def forward(self, x):
-
-        if opt.minibatch_averaging:
-            ### minibatch averaging ###
-            x_mean = torch.mean(x, 0).repeat(x.shape[0], 1)  # Average over the batch
-            x = torch.cat((x, x_mean), 1)  # Concatenation
-
-        # Feeding the model
-        output = self.model(x)
-        return output
-
-
 # class Discriminator(nn.Module):
 #     def __init__(self):
 #         super(Discriminator, self).__init__()
-#         ndf = 16
-#         self.conv1 = nn.Sequential(
-#             # input is (nc) x 64 x 64
-#             nn.Conv1d(1, ndf, 8, 4, 1, bias=False),
-#             nn.LeakyReLU(0.2, inplace=True)
-#         )
-#         self.conv2 = nn.Sequential(
-#             # state size. (ndf) x 32 x 32
-#             nn.Conv1d(ndf, ndf * 2, 8, 4, 1, bias=False),
-#             nn.BatchNorm1d(ndf * 2),
-#             nn.LeakyReLU(0.2, inplace=True),
+#
+#         # Discriminator's parameters
+#         self.disDim = 256
+#
+#         # The minibatch averaging setup
+#         ma_coef = 1
+#         if opt.minibatch_averaging:
+#             ma_coef = ma_coef * 2
+#
+#         self.model = nn.Sequential(
+#             nn.Linear(ma_coef * dataset_train_object.featureSize, self.disDim),
+#             nn.ReLU(True),
+#             nn.Linear(self.disDim, int(self.disDim)),
+#             nn.ReLU(True),
+#             nn.Linear(self.disDim, int(self.disDim)),
+#             nn.ReLU(True),
+#             nn.Linear(int(self.disDim), 1)
 #         )
 #
-#         self.conv3 = nn.Sequential(
-#             # state size. (ndf*2) x 16 x 16
-#             nn.Conv1d(ndf * 2, ndf * 4, 8, 4, 1, bias=False),
-#             nn.BatchNorm1d(ndf * 4),
-#             nn.LeakyReLU(0.2, inplace=True),
-#         )
+#     def forward(self, x):
 #
-#         self.conv4 = nn.Sequential(
-#             # state size. (ndf*4) x 8 x 8
-#             nn.Conv1d(ndf * 4, ndf * 8, 8, 4, 1, bias=False),
-#             nn.BatchNorm1d(ndf * 8),
-#             nn.LeakyReLU(0.2, inplace=True),
-#         )
+#         if opt.minibatch_averaging:
+#             ### minibatch averaging ###
+#             x_mean = torch.mean(x, 0).repeat(x.shape[0], 1)  # Average over the batch
+#             x = torch.cat((x, x_mean), 1)  # Concatenation
 #
-#         self.conv5 = nn.Sequential(
-#             # state size. (ndf*8) x 4 x 4
-#             nn.Conv1d(ndf * 8, 1, 3, 1, 0, bias=False),
-#             nn.Sigmoid()
-#         )
-#
-#     def forward(self, input):
-#         out = self.conv1(input.view(-1, 1, input.shape[1]))
-#         out = self.conv2(out)
-#         out = self.conv3(out)
-#         out = self.conv4(out)
-#         out = self.conv5(out)
-#         return torch.squeeze(out, dim=2)
+#         # Feeding the model
+#         output = self.model(x)
+#         return output
+
+
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        ndf = 16
+        self.conv1 = nn.Sequential(
+            # input is (nc) x 64 x 64
+            nn.Conv1d(1, ndf, 8, 4, 1),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv2 = nn.Sequential(
+            # state size. (ndf) x 32 x 32
+            nn.Conv1d(ndf, ndf * 2, 8, 4, 1),
+            nn.BatchNorm1d(ndf * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv3 = nn.Sequential(
+            # state size. (ndf*2) x 16 x 16
+            nn.Conv1d(ndf * 2, ndf * 4, 8, 4, 1),
+            nn.BatchNorm1d(ndf * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv4 = nn.Sequential(
+            # state size. (ndf*4) x 8 x 8
+            nn.Conv1d(ndf * 4, ndf * 8, 8, 4, 1),
+            nn.BatchNorm1d(ndf * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
+
+        self.conv5 = nn.Sequential(
+            # state size. (ndf*8) x 4 x 4
+            nn.Conv1d(ndf * 8, 1, 3, 1, 0),
+            nn.Sigmoid()
+        )
+
+    def forward(self, input):
+        out = self.conv1(input.view(-1, 1, input.shape[1]))
+        out = self.conv2(out)
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.conv5(out)
+        return torch.squeeze(out, dim=2)
 
 ###############
 ### Lossess ###
