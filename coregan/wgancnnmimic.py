@@ -36,11 +36,11 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training")
+parser.add_argument("--n_epochs", type=int, default=100, help="number of epochs of training")
 parser.add_argument("--n_epochs_pretrain", type=int, default=100,
                     help="number of epochs of pretraining the autoencoder")
 parser.add_argument("--batch_size", type=int, default=100, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.00001, help="adam: learning rate")
+parser.add_argument("--lr", type=float, default=0.001, help="adam: learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.00001, help="l2 regularization")
 parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
@@ -65,13 +65,13 @@ parser.add_argument("--epoch_time_show", type=bool, default=True, help="interval
 parser.add_argument("--epoch_save_model_freq", type=int, default=10, help="number of epops per model save")
 parser.add_argument("--minibatch_averaging", type=bool, default=False, help="Minibatch averaging")
 
-parser.add_argument("--pretrained_status", type=bool, default=True, help="If want to use ae pretrained weights")
+parser.add_argument("--pretrained_status", type=bool, default=False, help="If want to use ae pretrained weights")
 parser.add_argument("--training", type=bool, default=True, help="Training status")
 parser.add_argument("--resume", type=bool, default=False, help="Training status")
 parser.add_argument("--finetuning", type=bool, default=False, help="Training status")
 parser.add_argument("--generate", type=bool, default=False, help="Generating Sythetic Data")
 parser.add_argument("--evaluate", type=bool, default=False, help="Evaluation status")
-parser.add_argument("--expPATH", type=str, default=os.path.expanduser('~/experiments/pytorch/model/'+experimentName),
+parser.add_argument("--expPATH", type=str, default=os.path.expanduser('~/experiments/pytorch/model/' + experimentName),
                     help="Training status")
 opt = parser.parse_args()
 print(opt)
@@ -81,7 +81,7 @@ if not os.path.exists(opt.expPATH):
     os.system('mkdir {0}'.format(opt.expPATH))
 
 # Random seed for pytorch
-opt.manualSeed = random.randint(1, 10000) # fix seed
+opt.manualSeed = random.randint(1, 10000)  # fix seed
 print("Random Seed: ", opt.manualSeed)
 random.seed(opt.manualSeed)
 torch.manual_seed(opt.manualSeed)
@@ -118,6 +118,7 @@ testData = testData.astype(np.float32)
 np.save(os.path.join(opt.expPATH, "dataTrain.npy"), trainData, allow_pickle=False)
 np.save(os.path.join(opt.expPATH, "dataTest.npy"), testData, allow_pickle=False)
 
+
 class Dataset:
     def __init__(self, data, transform=None):
 
@@ -143,7 +144,7 @@ class Dataset:
         sample = np.clip(sample, 0, 1)
 
         if self.transform:
-           pass
+            pass
 
         return torch.from_numpy(sample)
 
@@ -163,6 +164,7 @@ dataloader_test = DataLoader(dataset_test_object, batch_size=opt.batch_size,
 # Generate random samples for test
 random_samples = next(iter(dataloader_test))
 feature_size = random_samples.size()[1]
+
 
 ####################
 ### Architecture ###
@@ -204,29 +206,33 @@ class Autoencoder(nn.Module):
         )
 
         self.decoder = nn.Sequential(
-            nn.ConvTranspose1d(in_channels=32 * n_channels_base, out_channels=16 * n_channels_base, kernel_size=5, stride=1, padding=0, dilation=1,
+            nn.ConvTranspose1d(in_channels=32 * n_channels_base, out_channels=16 * n_channels_base, kernel_size=5,
+                               stride=1, padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.ConvTranspose1d(in_channels=16 * n_channels_base, out_channels=8 * n_channels_base, kernel_size=5, stride=4, padding=0,
+            nn.ReLU(),
+            nn.ConvTranspose1d(in_channels=16 * n_channels_base, out_channels=8 * n_channels_base, kernel_size=5,
+                               stride=4, padding=0,
                                dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(8 * n_channels_base),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.ConvTranspose1d(in_channels=8 * n_channels_base, out_channels=4 * n_channels_base, kernel_size=7, stride=4,
+            nn.ReLU(),
+            nn.ConvTranspose1d(in_channels=8 * n_channels_base, out_channels=4 * n_channels_base, kernel_size=7,
+                               stride=4,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(4 * n_channels_base),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.ConvTranspose1d(in_channels=4 * n_channels_base, out_channels=2 * n_channels_base, kernel_size=7, stride=3,
+            nn.ReLU(),
+            nn.ConvTranspose1d(in_channels=4 * n_channels_base, out_channels=2 * n_channels_base, kernel_size=7,
+                               stride=3,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(2 * n_channels_base),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
             nn.ConvTranspose1d(in_channels=2 * n_channels_base, out_channels=n_channels_base, kernel_size=7, stride=2,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
             nn.BatchNorm1d(n_channels_base),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(),
             nn.ConvTranspose1d(in_channels=n_channels_base, out_channels=1, kernel_size=3, stride=2,
                                padding=0, dilation=1,
                                groups=1, bias=True, padding_mode='zeros'),
@@ -262,6 +268,30 @@ class Autoencoder(nn.Module):
 #         out = self.activation2(self.bn2(self.linear2(out)))
 #         out = self.activation3(self.linear1(out))
 #         return out
+
+# class Generator(nn.Module):
+#     def __init__(self):
+#         super(Generator, self).__init__()
+#         self.genDim = 128
+#         self.linear1 = nn.Linear(opt.latent_dim, self.genDim)
+#         self.bn1 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
+#         self.activation1 = nn.ReLU()
+#         self.linear2 = nn.Linear(opt.latent_dim, self.genDim)
+#         self.bn2 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
+#         self.activation2 = nn.Tanh()
+#
+#     def forward(self, x):
+#         # Layer 1
+#         residual = x
+#         temp = self.activation1(self.bn1(self.linear1(x)))
+#         out1 = temp + residual
+#
+#         # Layer 2
+#         residual = out1
+#         temp = self.activation2(self.bn2(self.linear2(out1)))
+#         out2 = temp + residual
+#         return out2
+
 
 class Generator(nn.Module):
     def __init__(self):
@@ -326,6 +356,7 @@ class Discriminator(nn.Module):
         output = self.model(x)
         return output
 
+
 # class Discriminator(nn.Module):
 #     def __init__(self):
 #         super(Discriminator, self).__init__()
@@ -369,7 +400,7 @@ class Discriminator(nn.Module):
 #         out = self.conv4(out)
 #         out = self.conv5(out)
 #         return torch.squeeze(out, dim=2)
-    
+
 ###############
 ### Lossess ###
 ###############
@@ -409,9 +440,10 @@ def _gradient_penalty(real_data, generated_data):
     # Return gradient penalty
     return self.gp_weight * ((gradients_norm - 1) ** 2).mean()
 
+
 # https://github.com/caogang/wgan-gp/blob/master/gan_mnist.py
 def calc_gradient_penalty(netD, real_data, fake_data):
-    #print real_data.size()
+    # print real_data.size()
     alpha = torch.rand(BATCH_SIZE, 1)
     alpha = alpha.expand(real_data.size())
     alpha = alpha.cuda(gpu) if use_cuda else alpha
@@ -431,6 +463,7 @@ def calc_gradient_penalty(netD, real_data, fake_data):
 
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
     return gradient_penalty
+
 
 def generator_loss(y_fake, y_true):
     """
@@ -523,22 +556,18 @@ autoencoderModel = Autoencoder()
 autoencoderDecoder = autoencoderModel.decoder
 
 # Define cuda Tensors
+# BE careful about torch.FloatTensor([1])!!!!
+# I once defined it as torch.FloatTensor(1) without brackets around 1 and everything was messed hiddenly!!
 Tensor = torch.FloatTensor
-one = torch.FloatTensor(1)
+one = torch.FloatTensor([1])
 mone = one * -1
 
-# Adversarial ground truths
-# valid = Variable(Tensor(samples.shape[0]).fill_(1.0), requires_grad=False)
-# fake = Variable(Tensor(samples.shape[0]).fill_(0.0), requires_grad=False)
-input = torch.FloatTensor(opt.batch_size, feature_size)
-noise = torch.FloatTensor(opt.batch_size, opt.latent_dim)
-
 if torch.cuda.device_count() > 1 and opt.multiplegpu:
-  print("Let's use", torch.cuda.device_count(), "GPUs!")
-  generatorModel = nn.DataParallel(generatorModel, list(range(opt.num_gpu)))
-  discriminatorModel = nn.DataParallel(discriminatorModel, list(range(opt.num_gpu)))
-  autoencoderModel = nn.DataParallel(autoencoderModel, list(range(opt.num_gpu)))
-  autoencoderDecoder = nn.DataParallel(autoencoderDecoder, list(range(opt.num_gpu)))
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    generatorModel = nn.DataParallel(generatorModel, list(range(opt.num_gpu)))
+    discriminatorModel = nn.DataParallel(discriminatorModel, list(range(opt.num_gpu)))
+    autoencoderModel = nn.DataParallel(autoencoderModel, list(range(opt.num_gpu)))
+    autoencoderDecoder = nn.DataParallel(autoencoderDecoder, list(range(opt.num_gpu)))
 
 if opt.cuda:
     """
@@ -552,8 +581,6 @@ if opt.cuda:
     autoencoderDecoder.cuda()
     one, mone = one.cuda(), mone.cuda()
     Tensor = torch.cuda.FloatTensor
-    input = input.cuda()
-    noise = noise.cuda()
 
 # Weight initialization
 generatorModel.apply(weights_init)
@@ -656,30 +683,21 @@ if opt.training:
     gen_iterations = 0
     for epoch in range(opt.n_epochs):
         epoch_start = time.time()
-        traindata_iter = iter(dataloader_train)
-        # for i, samples in enumerate(dataloader_train):
-        i=0
-        for i in range(len(traindata_iter)):
+        for i, samples in enumerate(dataloader_train):
 
             # ---------------------
             #  Train Discriminator
             # ---------------------
 
-            # # Configure input
-            # real_samples = Variable(samples.type(Tensor))
-
-            # # Sample noise as generator input
-            # z = torch.randn(opt.batch_size, opt.latent_dim, device=device)
-            #
-            # # Generate a batch of images
-            # fake_samples = generatorModel(z)
+            # Configure input
+            real_samples = Variable(samples.type(Tensor))
 
             for p in discriminatorModel.parameters():  # reset requires_grad
                 p.requires_grad = True
 
             # train the discriminator n_iter_D times
             if gen_iterations < 25 or gen_iterations % 500 == 0:
-                n_iter_D = 5
+                n_iter_D = 100
             else:
                 n_iter_D = opt.n_iter_D
             j = 0
@@ -693,20 +711,8 @@ if opt.training:
                 # reset gradients of discriminator
                 optimizer_D.zero_grad()
 
-                # Load data
-                try:
-                    input = next(traindata_iter)
-                except StopIteration:
-                    traindata_iter = iter(dataloader_train)
-                    input = next(traindata_iter)
-
-                if opt.cuda:
-                    input = input.cuda()
-
-                # Turn to variable
-                inputv = Variable(input)
-
-                errD_real = torch.mean(discriminatorModel(inputv), dim=0)
+                # Error on real samples
+                errD_real = torch.mean(discriminatorModel(real_samples), dim=0)
                 errD_real.backward(one)
 
                 # Measure discriminator's ability to classify real from generated samples
@@ -715,18 +721,17 @@ if opt.training:
                 # operations, and therefore the subgraph involving this view is not recorded.
                 # Refer to http://www.bnikolic.co.uk/blog/pytorch-detach.html.
 
-                # train with fake
-                # noise.resize_(opt.batch_size, opt.latent_dim).normal_(0, 1)
-                noise = torch.randn(opt.batch_size, opt.latent_dim, device=device)
-                with torch.no_grad():
-                    noisev = Variable(noise)  # totally freeze netG
-                    fake = generatorModel(noisev)
+                # Sample noise as generator input
+                z = torch.randn(samples.shape[0], opt.latent_dim, device=device)
 
-                fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
-                errD_fake = torch.mean(discriminatorModel(fake_decoded),dim=0)
+                # Generate a batch of images
+                fake = generatorModel(z)
+
+                fake_decoded = torch.squeeze(autoencoderDecoder(fake.unsqueeze(dim=2)))
+                errD_fake = torch.mean(discriminatorModel(fake_decoded.detach()), dim=0)
                 errD_fake.backward(mone)
 
-                # Backward
+                # Error
                 errD = errD_real - errD_fake
                 # errD.backward(one)
 
@@ -750,6 +755,7 @@ if opt.training:
             # Since the backward() function accumulates gradients, and you don’t want to mix up gradients between
             # minibatches, you have to zero them out at the start of a new minibatch. This is exactly like how a general
             # (additive) accumulator variable is initialized to 0 in code.
+            # WARNING. BE VERY CAREFUL about the backward aurguments: https://pytorch.org/tutorials/beginner/former_torchies/autograd_tutorial.html
 
             for p in discriminatorModel.parameters():  # reset requires_grad
                 p.requires_grad = False
@@ -758,14 +764,13 @@ if opt.training:
             optimizer_G.zero_grad()
 
             # Sample noise as generator input
-            noise = torch.randn(opt.batch_size, opt.latent_dim, device=device)
-            noisev = Variable(noise)
+            z = torch.randn(samples.shape[0], opt.latent_dim, device=device)
 
             # Generate a batch of images
-            fake = generatorModel(noisev)
+            fake = generatorModel(z)
 
             # uncomment if there is no autoencoder
-            fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
+            fake_decoded = torch.squeeze(autoencoderDecoder(fake.unsqueeze(dim=2)))
 
             # Loss measures generator's ability to fool the discriminator
             errG = torch.mean(discriminatorModel(fake_decoded), dim=0)
@@ -909,7 +914,8 @@ if opt.generate:
         # z = Variable(Tensor(np.random.normal(0, 1, (opt.batch_size, opt.latent_dim))))
         z = torch.randn(opt.batch_size, opt.latent_dim, device=device)
         gen_samples_tensor = generatorModel(z)
-        gen_samples_decoded = torch.squeeze(autoencoderDecoder(gen_samples_tensor.view(-1, gen_samples_tensor.shape[1], 1)))
+        gen_samples_decoded = torch.squeeze(
+            autoencoderDecoder(gen_samples_tensor.view(-1, gen_samples_tensor.shape[1], 1)))
         gen_samples[i * opt.batch_size:(i + 1) * opt.batch_size, :] = gen_samples_decoded.cpu().data.numpy()
         # Check to see if there is any nan
         assert (gen_samples[i, :] != gen_samples[i, :]).any() == False
