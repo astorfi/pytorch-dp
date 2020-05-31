@@ -36,11 +36,11 @@ parser.add_argument("--DATASETPATH", type=str,
                     default=os.path.expanduser('~/data/MIMIC/processed/out_binary.matrix'),
                     help="Dataset file")
 
-parser.add_argument("--n_epochs", type=int, default=300, help="number of epochs of training")
+parser.add_argument("--n_epochs", type=int, default=500, help="number of epochs of training")
 parser.add_argument("--n_epochs_pretrain", type=int, default=100,
                     help="number of epochs of pretraining the autoencoder")
 parser.add_argument("--batch_size", type=int, default=100, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.0001, help="adam: learning rate")
+parser.add_argument("--lr", type=float, default=0.00001, help="adam: learning rate")
 parser.add_argument("--weight_decay", type=float, default=0.00001, help="l2 regularization")
 parser.add_argument("--b1", type=float, default=0.9, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
@@ -256,7 +256,7 @@ class Autoencoder(nn.Module):
 #         self.linear3 = nn.Linear(self.genDim, self.genDim)
 #         # self.bn3 = nn.BatchNorm1d(self.genDim, eps=0.001, momentum=0.01)
 #         self.activation3 = nn.Tanh()
-# 
+#
 #     def forward(self, x):
 #         out = self.activation1(self.bn1(self.linear1(x)))
 #         out = self.activation2(self.bn2(self.linear2(out)))
@@ -268,22 +268,22 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         ngf = 4
         self.main = nn.Sequential(
-        nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0, bias=False),
-        # nn.BatchNorm1d(ngf * 16, eps=0.001, momentum=0.01),
-        nn.ReLU(inplace=True),
-        nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf * 8, eps=0.001, momentum=0.01),
-        nn.ReLU(inplace=True),
-        nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf * 4, eps=0.001, momentum=0.01),
-        nn.ReLU(inplace=True),
-        nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-        nn.BatchNorm1d(ngf * 2, eps=0.001, momentum=0.01),
-        nn.ReLU(inplace=True),
-        nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1, bias=False),
+        nn.ConvTranspose1d(opt.latent_dim, ngf * 16, 4, 1, 0),
+        nn.BatchNorm1d(ngf * 16, eps=0.0001, momentum=0.01),
+        nn.LeakyReLU(0.2, inplace=True),
+        nn.ConvTranspose1d(ngf * 16, ngf * 8, 4, 2, 1),
+        nn.BatchNorm1d(ngf * 8, eps=0.0001, momentum=0.01),
+        nn.LeakyReLU(0.2, inplace=True),
+        nn.ConvTranspose1d(ngf * 8, ngf * 4, 4, 2, 1),
+        nn.BatchNorm1d(ngf * 4, eps=0.0001, momentum=0.01),
+        nn.LeakyReLU(0.2, inplace=True),
+        nn.ConvTranspose1d(ngf * 4, ngf * 2, 4, 2, 1),
+        nn.BatchNorm1d(ngf * 2, eps=0.0001, momentum=0.01),
+        nn.LeakyReLU(0.2, inplace=True),
+        nn.ConvTranspose1d(ngf * 2, ngf, 4, 2, 1),
         nn.BatchNorm1d(ngf, eps=0.001, momentum=0.01),
-        nn.ReLU(inplace=True),
-        nn.ConvTranspose1d(ngf, 1, 4, 2, 1, bias=False),
+        nn.LeakyReLU(0.2, inplace=True),
+        nn.ConvTranspose1d(ngf, 1, 4, 2, 1),
         nn.Tanh(),
         )
 
@@ -502,21 +502,14 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
+        # nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
     elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.normal_(m.weight.data, 1.0, 0.2)
         nn.init.constant_(m.bias.data, 0)
-
-    # classname = m.__class__.__name__
-    # if classname.find('Conv') != -1:
-    #     nn.init.xavier_normal_(m.weight.data)
-    #     # nn.init.normal_(m.weight.data, 0.0, 0.2)
-    # elif classname.find('BatchNorm') != -1:
-    #     nn.init.normal_(m.weight.data, 1.0, 0.2)
-    #     nn.init.constant_(m.bias.data, 0)
-    #     # nn.init.xavier_uniform_(m.weight)
-    # if type(m) == nn.Linear:
-    #     nn.init.xavier_uniform_(m.weight)
-    #     m.bias.data.fill_(0.01)
+    elif type(m) == nn.Linear:
+        nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
 
 
 #############
@@ -686,7 +679,7 @@ if opt.training:
 
             # train the discriminator n_iter_D times
             if gen_iterations < 25 or gen_iterations % 500 == 0:
-                n_iter_D = 100
+                n_iter_D = 5
             else:
                 n_iter_D = opt.n_iter_D
             j = 0
@@ -714,7 +707,7 @@ if opt.training:
                 inputv = Variable(input)
 
                 errD_real = torch.mean(discriminatorModel(inputv), dim=0)
-                # errD_real.backward(one)
+                errD_real.backward(one)
 
                 # Measure discriminator's ability to classify real from generated samples
                 # The detach() method constructs a new view on a tensor which is declared
@@ -730,12 +723,12 @@ if opt.training:
                     fake = generatorModel(noisev)
 
                 fake_decoded = torch.squeeze(autoencoderDecoder(fake.view(-1, fake.shape[1], 1)))
-                errD_fake = torch.mean(discriminatorModel(fake_decoded.detach()),dim=0)
-                # errD_fake.backward(mone)
+                errD_fake = torch.mean(discriminatorModel(fake_decoded),dim=0)
+                errD_fake.backward(mone)
 
                 # Backward
                 errD = errD_real - errD_fake
-                errD.backward(one)
+                # errD.backward(one)
 
                 # Optimizer step
                 optimizer_D.step()
